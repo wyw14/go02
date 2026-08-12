@@ -39,6 +39,11 @@ func (s *Stream) Close(context.Context) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	// check state
+	if s.closed {
+		return nil
+	}
+
 	// close stream
 	s.cancel()
 	s.event = nil

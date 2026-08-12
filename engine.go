@@ -379,15 +379,30 @@ func (e *Engine) Close() {
 		return
 	}
 
-	// close streams
+	// snapshot streams under the engine lock so we can close them after
+	// releasing it (Stream.Close acquires stream.mutex then engine.mutex via
+	// stream.cancel, so we must not invert that ordering)
+	streams := make([]*Stream, 0, len(e.streams))
 	for stream := range e.streams {
-		close(stream.signal)
+		streams = append(streams, stream)
 	}
 
 	// kill the tomb under the mutex, then release it so that in-flight Begin
 	// calls can re-acquire the mutex and observe the dead tomb
 	e.tomb.Kill(nil)
 	e.mutex.Unlock()
+
+	// close each stream under its own mutex so concurrent or subsequent
+	// Stream.Close calls observe s.closed and skip the (now closed) signal
+	// channel send
+	for _, stream := range streams {
+		stream.mutex.Lock()
+		if !stream.closed {
+			stream.closed = true
+			close(stream.signal)
+		}
+		stream.mutex.Unlock()
+	}
 
 	// await goroutine termination
 	_ = e.tomb.Wait()

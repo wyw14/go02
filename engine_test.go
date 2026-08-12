@@ -51,3 +51,19 @@ func TestEngineBeginRejectedAfterClose(t *testing.T) {
 	_, err = engine.Begin(nil, false)
 	assert.Equal(t, ErrEngineClosed, err)
 }
+
+func TestStreamCloseAfterEngineClose(t *testing.T) {
+	engine, err := CreateEngine(Options{Store: NewMemoryStore()})
+	assert.NoError(t, err)
+
+	stream, err := engine.Watch(Handle{"db", "coll"}, nil, nil, nil, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, stream)
+
+	engine.Close()
+
+	// must not panic
+	assert.NoError(t, stream.Close(nil))
+	// idempotent
+	assert.NoError(t, stream.Close(nil))
+}
